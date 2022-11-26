@@ -4,8 +4,7 @@ import numpy as np
 import mediapipe as mp
 
 
-MOUTH_IN = [13, 14]
-MOUTH_OUT = [0, 17, 37, 39]
+MOUTH = [308, 13, 78, 14]
 RIGHT_EYE = [33, 7, 163, 144, 145, 153, 154,
              155, 133, 173, 157, 158, 159, 160, 161, 246]
 LEFT_EYE = [362, 382, 381, 380, 374, 373, 390,
@@ -13,7 +12,7 @@ LEFT_EYE = [362, 382, 381, 380, 374, 373, 390,
 RIGHT_BROW = []
 LEFT_BROW = []
 NOSE = [1]
-FACE = [10, 21]
+HEAD = [454, 10, 234, 152]
 RIGHT_IRIS = [468, 469, 470, 471, 472]
 LEFT_IRIS = [473, 474, 475, 476, 477]
 
@@ -47,14 +46,13 @@ class PointsDetector:
             result.multi_face_landmarks[0].landmark, img.shape)
 
         return {
-            'mouth_in': mesh_points[MOUTH_IN],
-            'mouth_out': mesh_points[MOUTH_OUT],
+            'mouth': mesh_points[MOUTH],
             'right_eye': mesh_points[RIGHT_EYE],
             'left_eye': mesh_points[LEFT_EYE],
             'eyeR': mesh_points[RIGHT_IRIS],
             'eyeL': mesh_points[LEFT_IRIS],
             'nose': mesh_points[NOSE],
-            'face': mesh_points[FACE]
+            'head': mesh_points[HEAD]
         }
 
     def convert(self, points: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
@@ -68,7 +66,7 @@ class PointsDetector:
             np.ndarray: matrix of points
         """
 
-        return np.array([[int(point.x*shape[1]), int(point.y*shape[0])] for point in points])
+        return np.array([[point.x*shape[1], point.y*shape[0]] for point in points])
 
 
 def compute_transformation(ref_points: np.ndarray, points: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
@@ -144,33 +142,46 @@ def rotate_image(img: np.ndarray, angle: float) -> np.ndarray:
     return rotated_mat
 
 
-def apply_transformation(img: np.ndarray, translation: np.ndarray, squeeze: np.ndarray, angle: float) -> np.ndarray:
+def apply_transformation(img_source: np.ndarray, img: np.ndarray, translation: np.ndarray, squeeze: np.ndarray, angle: float) -> np.ndarray:
+    """Apply transformation of img to img_source.
+
+    Args:
+        img_source (np.ndarray): source image
+        img (np.ndarray): image to transform
+        translation (np.ndarray): translation vector
+        squeeze (np.ndarray): squeeze factors
+        angle (float): rotation angle
+
+    Returns:
+        np.ndarray: transformed image
+    """
+
     # Apply squeeze
-    img = cv2.resize(img, (0, 0), fx=squeeze[0], fy=squeeze[1])
+    img = cv2.resize(img, (0, 0), fx=squeeze[0], fy=max(squeeze[1], 0.01))
 
     # Apply rotation
     img = rotate_image(img, angle)
 
     # Correct translation from rotation
-    img_center = np.array([img.shape[1]//2, img.shape[0]//2])
+    img_center = np.array([img.shape[1] / 2, img.shape[0] / 2])
     translation -= img_center
 
-    # Apply translation
-    img = cv2.copyMakeBorder(img, int(translation[1]), 0, int(translation[0]), 0,
-                             cv2.BORDER_CONSTANT, value=(0, 0, 0))
+    # Apply translation and overlay
+    img_result = overlay_image_alpha(
+        img_source, img, int(translation[0]), int(translation[1]))
 
-    return img
+    return img_result
 
 
-def overlay_image_alpha(img_source: np.ndarray, img_overlay: np.ndarray, x: float, y: float) -> np.ndarray:
+def overlay_image_alpha(img_source: np.ndarray, img_overlay: np.ndarray, x: int, y: int) -> np.ndarray:
     """Overlay img_overlay on top of img_source at the position (x, y), using alpha
     channel of img_overlay.
 
     Args:
         img_source (np.ndarray): background image
         img_overlay (np.ndarray): overlay image
-        x (float): x position
-        y (float): y position
+        x (int): x position
+        y (int): y position
 
     Returns:
         np.ndarray: overlayed image
@@ -188,7 +199,7 @@ def overlay_image_alpha(img_source: np.ndarray, img_overlay: np.ndarray, x: floa
 
     # Exit if nothing to do
     if y1 >= y2 or x1 >= x2 or y1o >= y2o or x1o >= x2o:
-        return
+        return img
 
     # Blend overlay within the determined ranges
     img_crop = img[y1:y2, x1:x2]
@@ -202,9 +213,12 @@ def overlay_image_alpha(img_source: np.ndarray, img_overlay: np.ndarray, x: floa
 
 
 def _main_():
-    
+    """Main function."""
+
     # Reference points for each piece of the face
     image_points = {
+        'head': np.array([[200.0, 0.0], [0.0, -200.0], [-200.0, 0.0], [0.0, 200.0]]),
+        'mouth': np.array([[53.0, -7.0], [2.0, -21.0], [-49.0, -5.0], [3.0, 19.0]]),
         'eyeL': np.array([[0.0, 0.0], [17.5, 0.0], [0.0, -17.5], [-17.5, 0.0], [0.0, 17.5]]),
         'eyeR': np.array([[0.0, 0.0], [17.5, 0.0], [0.0, -17.5], [-17.5, 0.0], [0.0, 17.5]]),
     }
@@ -213,10 +227,20 @@ def _main_():
     point_detector = PointsDetector()
     cap = cv2.VideoCapture(0)
 
+    # Create windows
+    cv2.namedWindow('Source')
+    cv2.moveWindow('Source', 1, 1)
+    cv2.namedWindow('Avatar')
+    cv2.moveWindow('Avatar', int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))+2, 1)
+
     running = True
     while running:
         # Capture and process frame
         success, img_source = cap.read()
+        if not success:
+            continue
+
+        img_source = cv2.flip(img_source, 1)
         img_source = cv2.cvtColor(img_source, cv2.COLOR_BGR2BGRA)
         points = point_detector.process(img_source[..., :3])
 
@@ -227,13 +251,22 @@ def _main_():
         # Draw the avatar
         img_avatar = 255 * np.ones_like(img_source)
         for img_name in image_points:
+            # Get current piece of the face
             img_path = os.path.join('imgs', 'avatar', img_name + '.png')
             avatar_piece = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+
+            # Get transformation parameters
             translation, squeeze, angle = compute_transformation(
-                image_points[img_name], points[img_name])
-            avatar_piece = apply_transformation(
-                avatar_piece, translation, squeeze, angle)
-            img_avatar = overlay_image_alpha(img_avatar, avatar_piece, 0, 0)
+                image_points[img_name],
+                points[img_name])
+
+            # Apply transformation
+            img_avatar = apply_transformation(
+                img_avatar,
+                avatar_piece,
+                translation,
+                squeeze,
+                angle)
 
         # Display the result
         cv2.imshow('Source', img_source)
