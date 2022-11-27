@@ -19,6 +19,12 @@ tx = c
 ty = f
 
 
+
+## For a 1800x1800 image
+{'body': [587, 1274], 'earL': [353, 180], 'earR': [971, 181], 'head': [474, 699], 'crown': [746, 594], 'eyeL': [773, 900], 'eyeR': [930, 899], 'mouth': [818, 1182], 'moustacheL': [70, 1017], 'moustacheR': [1099, 1011]}
+
+
+
 ## Points
 
 Face bounds : [454, 10, 234, 152]
