@@ -91,7 +91,7 @@ def _main_(args: argparse.Namespace) -> None:
     """Main function."""
 
     path = os.path.join(os.path.dirname(__file__), 'data', args.avatar)
-    
+
     # Calibration
     if args.calibrate:
         calibrated = calibrate_avatar(path)
@@ -109,6 +109,9 @@ def _main_(args: argparse.Namespace) -> None:
     # Create windows
     cv2.namedWindow('Source', cv2.WINDOW_NORMAL)
     cv2.namedWindow('Avatar', cv2.WINDOW_NORMAL)
+    if args.debug:
+        cv2.namedWindow('Source with 3D points', cv2.WINDOW_NORMAL)
+        cv2.namedWindow('Source with 2D points', cv2.WINDOW_NORMAL)
 
     running = True
     # Main loop
@@ -149,6 +152,23 @@ def _main_(args: argparse.Namespace) -> None:
         # Display the result
         cv2.imshow('Source', frame)
         cv2.imshow('Avatar', img_avatar)
+        if args.debug:
+
+            # Draw 2D points
+            frame_ = frame.copy()
+            for point in points:
+                cv2.circle(frame_, (int(point[0]), int(
+                    point[1])), 1, (30, 80, 255), -1)
+            cv2.imshow('Source with 2D points', frame_)
+
+            # Draw 3D points
+            frame_ = frame.copy()
+            points = point_detector.raw_process(frame[..., :3])
+            if points is not None:
+                for point in points:
+                    cv2.circle(frame_, (int(point[0]), int(
+                        point[1])), 1, (30, 80, 255), -1)
+            cv2.imshow('Source with 3D points', frame_)
 
         # Handle keyboard events
         key = cv2.waitKey(1)
@@ -168,6 +188,8 @@ if __name__ == '__main__':
                         type=str, default='avatar', help='avatar name')
     parser.add_argument('-c', '--calibrate',
                         action='store_true', help='calibrate avatar')
+    parser.add_argument('-d', '--debug',
+                        action='store_true', help='debug mode')
     args = parser.parse_args()
 
     # Run main function

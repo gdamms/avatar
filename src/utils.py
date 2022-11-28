@@ -19,7 +19,7 @@ class PointsDetector:
 
         self.prev_points = []
 
-    def process(self, img: np.ndarray) -> np.ndarray:
+    def raw_process(self, img: np.ndarray) -> np.ndarray:
         """Process image and return points.
 
         Args:
@@ -32,19 +32,29 @@ class PointsDetector:
         # Process image with mediapipe face mesh
         result = self.face_mesh.process(img)
         if not result.multi_face_landmarks:
-
-            if len(self.prev_points) > 0:
-                # Return previous points if no face detected
-                mesh_points = np.mean(self.prev_points, axis=0)
-                return mesh_points
-            
-            # No face ever detected
             return None
 
         # Convert points to matrix
         mesh_points = self.convert(
             result.multi_face_landmarks[0].landmark, img.shape)
-        
+
+        return mesh_points
+
+    def process(self, img: np.ndarray) -> np.ndarray:
+        """Process image and return points.
+
+        Args:
+            img (np.ndarray): Image to process.
+
+        Returns:
+            np.ndarray: Nx2 matrix of points.
+        """
+
+        # Get raw points
+        mesh_points = self.raw_process(img)
+        if mesh_points is None:
+            return None
+
         # Compute origin and normal of the face plane
         origin_point = (mesh_points[LEFT] + mesh_points[RIGHT]) / 2
         normal = mesh_points[NOSE] - origin_point
@@ -52,7 +62,8 @@ class PointsDetector:
 
         # Project points on the face plane
         mesh_points = mesh_points - origin_point
-        mesh_points = mesh_points - np.dot(mesh_points, normal)[:, np.newaxis] * normal
+        mesh_points = mesh_points - \
+            np.dot(mesh_points, normal)[:, np.newaxis] * normal
 
         # Project points on the frame plane
         mesh_points = mesh_points + origin_point
