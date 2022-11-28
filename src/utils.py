@@ -17,6 +17,8 @@ class PointsDetector:
         self.face_mesh = mp.solutions.face_mesh.FaceMesh(
             max_num_faces=1, refine_landmarks=True)
 
+        self.prev_points = []
+
     def process(self, img: np.ndarray) -> np.ndarray:
         """Process image and return points.
 
@@ -30,6 +32,13 @@ class PointsDetector:
         # Process image with mediapipe face mesh
         result = self.face_mesh.process(img)
         if not result.multi_face_landmarks:
+
+            if len(self.prev_points) > 0:
+                # Return previous points if no face detected
+                mesh_points = np.mean(self.prev_points, axis=0)
+                return mesh_points
+            
+            # No face ever detected
             return None
 
         # Convert points to matrix
@@ -48,7 +57,13 @@ class PointsDetector:
         # Project points on the frame plane
         mesh_points = mesh_points + origin_point
 
-        return mesh_points[:, :2]
+        # Smooth mesh points
+        self.prev_points.append(mesh_points[:, :2])
+        if len(self.prev_points) > 5:
+            self.prev_points.pop(0)
+        mesh_points = np.mean(self.prev_points, axis=0)
+
+        return mesh_points
 
     def convert(self, points: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
         """Convert mediapipe points to matrix.
