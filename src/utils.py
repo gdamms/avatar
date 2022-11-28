@@ -3,6 +3,11 @@ import numpy as np
 import mediapipe as mp
 
 
+NOSE = 4
+LEFT = 93
+RIGHT = 323
+
+
 class PointsDetector:
     """Landmarks detecttion using mediapipe face mesh."""
 
@@ -30,8 +35,20 @@ class PointsDetector:
         # Convert points to matrix
         mesh_points = self.convert(
             result.multi_face_landmarks[0].landmark, img.shape)
+        
+        # Compute origin and normal of the face plane
+        origin_point = (mesh_points[LEFT] + mesh_points[RIGHT]) / 2
+        normal = mesh_points[NOSE] - origin_point
+        normal = normal / np.linalg.norm(normal)
 
-        return mesh_points
+        # Project points on the face plane
+        mesh_points = mesh_points - origin_point
+        mesh_points = mesh_points - np.dot(mesh_points, normal)[:, np.newaxis] * normal
+
+        # Project points on the frame plane
+        mesh_points = mesh_points + origin_point
+
+        return mesh_points[:, :2]
 
     def convert(self, points: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
         """Convert mediapipe points to matrix.
@@ -44,7 +61,7 @@ class PointsDetector:
             np.ndarray: matrix of points
         """
 
-        return np.array([[point.x*shape[1], point.y*shape[0]] for point in points])
+        return np.array([[point.x*shape[1], point.y*shape[0], point.z*shape[1]] for point in points])
 
 
 def rotate_image(img: np.ndarray, angle: float) -> np.ndarray:
