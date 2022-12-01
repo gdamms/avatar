@@ -6,6 +6,7 @@ import mediapipe as mp
 NOSE = 4
 LEFT = 93
 RIGHT = 323
+SMOOTHING = 2
 
 
 class PointsDetector:
@@ -70,7 +71,7 @@ class PointsDetector:
 
         # Smooth mesh points
         self.prev_points.append(mesh_points[:, :2])
-        if len(self.prev_points) > 5:
+        if len(self.prev_points) > SMOOTHING:
             self.prev_points.pop(0)
         mesh_points = np.mean(self.prev_points, axis=0)
 
