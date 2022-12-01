@@ -99,10 +99,11 @@ def calibrate_avatar(path: str) -> bool:
                     cam_pose[1] - frame.shape[0] / 2
                 ])
                 points_ -= np.array(piece['position'])
-                points_ -= np.array([
-                    img_.shape[1] / 2,
-                    img_.shape[0] / 2
-                ])
+                if piece['method'] == 'squeeze':
+                    points_ -= np.array([
+                        img_.shape[1] / 2,
+                        img_.shape[0] / 2
+                    ])
 
                 # Save calibration positions
                 piece['calibration'] = [list(row)

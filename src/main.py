@@ -87,6 +87,53 @@ def apply_transformation(
     return img_result
 
 
+def compute_homography(
+    ref_points: np.ndarray,
+    points: np.ndarray
+) -> np.ndarray:
+    """Compute homography parameters.
+
+    Args:
+        ref_points (np.ndarray): reference points
+        points (np.ndarray): points
+
+    Returns:
+        np.ndarray: homography parameters
+    """
+
+    # Compute homographie
+    H, _ = cv2.findHomography(ref_points, points, cv2.RANSAC)
+
+    return H
+
+
+def apply_homography(
+    img_source: np.ndarray,
+    img: np.ndarray,
+    H: np.ndarray
+) -> np.ndarray:
+    """Apply homography of img to img_source.
+
+    Args:
+        img_source (np.ndarray): source image
+        img (np.ndarray): image to transform
+        H (np.ndarray): homography parameters
+
+    Returns:
+        np.ndarray: transformed image
+    """
+
+    # Apply homographie
+    img_result = cv2.warpPerspective(
+        img, H, (img_source.shape[1], img_source.shape[0]))
+
+    # Overlay
+    img_result = overlay_image_alpha(
+        img_source, img_result, 0, 0)
+
+    return img_result
+
+
 def _main_(args: argparse.Namespace) -> None:
     """Main function."""
 
@@ -136,18 +183,31 @@ def _main_(args: argparse.Namespace) -> None:
             img_path = os.path.join(path, name + '.png')
             avatar_piece = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
 
-            # Get transformation parameters
-            translation, squeeze, angle = compute_transformation(
-                np.array(piece['calibration']),
-                points[piece['mesh']])
+            if piece['method'] == 'squeeze':
+                # Get transformation parameters
+                translation, squeeze, angle = compute_transformation(
+                    np.array(piece['calibration']),
+                    points[piece['mesh']])
 
-            # Apply transformation
-            img_avatar = apply_transformation(
-                img_avatar,
-                avatar_piece,
-                translation,
-                squeeze,
-                angle)
+                # Apply transformation
+                img_avatar = apply_transformation(
+                    img_avatar,
+                    avatar_piece,
+                    translation,
+                    squeeze,
+                    angle)
+            
+            elif piece['method'] == 'homography':
+                # Get homography matrix
+                homography = compute_homography(
+                    np.array(piece['calibration']),
+                    points[piece['mesh']])
+
+                # Apply homography
+                img_avatar = apply_homography(
+                    img_avatar,
+                    avatar_piece,
+                    homography)
 
         # Display the result
         cv2.imshow('Source', frame)
