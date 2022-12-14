@@ -179,35 +179,104 @@ def _main_(args: argparse.Namespace) -> None:
         # Draw the avatar
         img_avatar = 255 * np.ones_like(frame)
         for name, piece in avatar_config['pieces'].items():
+
             # Get current piece of the face
             img_path = os.path.join(path, name + '.png')
             avatar_piece = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
 
-            if piece['method'] == 'squeeze':
-                # Get transformation parameters
-                translation, squeeze, angle = compute_transformation(
-                    np.array(piece['calibration']),
-                    points[piece['mesh']])
+            # Get reference points
+            ref_points = [np.array(piece['calibration'][i])
+                          for i in range(len(piece['calibration']))]
 
-                # Apply transformation
-                img_avatar = apply_transformation(
-                    img_avatar,
-                    avatar_piece,
-                    translation,
-                    squeeze,
-                    angle)
-            
-            elif piece['method'] == 'homography':
-                # Get homography matrix
-                homography = compute_homography(
-                    np.array(piece['calibration']),
-                    points[piece['mesh']])
+            for ref_points_, transfo in zip(ref_points, piece['transformations']):
+                cur_points = points[transfo['points']]
 
-                # Apply homography
-                img_avatar = apply_homography(
-                    img_avatar,
-                    avatar_piece,
-                    homography)
+                if transfo['method'] == 'transform':
+                    # Get transformation parameters
+                    translation, squeeze, angle = compute_transformation(
+                        ref_points_ -
+                        np.array([avatar_piece.shape[1] / 2,
+                                  avatar_piece.shape[0] / 2]),
+                        cur_points)
+
+                    # Apply transformation
+                    img_avatar = apply_transformation(
+                        img_avatar,
+                        avatar_piece,
+                        translation,
+                        squeeze,
+                        angle)
+
+                    # Update ref_points
+                    transfo_mat = np.array([
+                        [
+                            np.cos(angle) * squeeze[0],
+                            -np.sin(angle) * squeeze[1],
+                            translation[0]
+                        ],
+                        [
+                            np.sin(angle) * squeeze[0],
+                            np.cos(angle) * squeeze[1],
+                            translation[1]
+                        ]
+                    ])
+                    for point_i, points_ in enumerate(ref_points):
+                        points_ = np.array([
+                            points_[:, 0],
+                            points_[:, 1],
+                            np.ones(len(points_))
+                        ])
+                        ref_points[point_i] = (
+                            transfo_mat @ points_).transpose()
+
+                elif transfo['method'] == 'homography':
+                    # Get homography matrix
+                    homography = compute_homography(
+                        ref_points_,
+                        cur_points)
+
+                    # Apply homography
+                    img_avatar = apply_homography(
+                        img_avatar,
+                        avatar_piece,
+                        homography)
+
+                    # Update ref_points
+                    for point_i, points_ in enumerate(ref_points):
+                        points_ = np.array([
+                            points_[:, 0],
+                            points_[:, 1],
+                            np.ones(len(points_))
+                        ])
+                        ref_points[point_i] = (
+                            homography @ points_).transpose()[..., :2]
+
+                elif transfo['method'] == 'squeeze':
+                    # Get squeeze
+                    ref_dist = (
+                        np.linalg.norm(ref_points_[0] - ref_points_[1]) /
+                        np.linalg.norm(ref_points_[2] - ref_points_[3])
+                    )
+                    cur_dist = (
+                        np.linalg.norm(cur_points[0] - cur_points[1]) /
+                        np.linalg.norm(cur_points[2] - cur_points[3])
+                    )
+                    squeeze = np.array([
+                        1,
+                        cur_dist / ref_dist
+                    ])
+
+                    # Save previous shape
+                    prev_shape = avatar_piece.shape
+
+                    # Apply squeeze to image and ref_points
+                    avatar_piece = cv2.resize(
+                        avatar_piece, (0, 0), fx=squeeze[0], fy=squeeze[1])
+                    for ref_points_ in ref_points:
+                        ref_points_ -= (1-squeeze) * np.array([
+                            prev_shape[1] / 2,
+                            prev_shape[0] / 2
+                        ])
 
         # Display the result
         cv2.imshow('Source', frame)

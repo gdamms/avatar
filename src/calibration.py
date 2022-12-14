@@ -92,22 +92,21 @@ def calibrate_avatar(path: str) -> bool:
             for name, piece in avatar_config['pieces'].items():
                 img_ = cv2.imread(os.path.join(
                     path, f'{name}.png'), cv2.IMREAD_UNCHANGED)
-                points_ = points[piece['mesh']]
-                points_ *= cam_scale
-                points_ += np.array([
-                    cam_pose[0] - frame.shape[1] / 2,
-                    cam_pose[1] - frame.shape[0] / 2
-                ])
-                points_ -= np.array(piece['position'])
-                if piece['method'] == 'squeeze':
-                    points_ -= np.array([
-                        img_.shape[1] / 2,
-                        img_.shape[0] / 2
-                    ])
 
-                # Save calibration positions
-                piece['calibration'] = [list(row)
-                                        for row in np.round(points_, 1)]
+                piece['calibration'] = []
+
+                for transfo in piece['transformations']:
+                    points_ = points[transfo['points']]
+                    points_ *= cam_scale
+                    points_ += np.array([
+                        cam_pose[0] - frame.shape[1] / 2,
+                        cam_pose[1] - frame.shape[0] / 2
+                    ])
+                    points_ -= np.array(piece['position'])
+
+                    # Save calibration positions
+                    piece['calibration'].append([list(row)
+                                                 for row in np.round(points_, 1)])
 
             # Write avatar config file
             with open(os.path.join(path, 'config.json'), 'w') as f:
