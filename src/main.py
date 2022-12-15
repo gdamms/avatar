@@ -71,7 +71,7 @@ def apply_transformation(
     """
 
     # Apply squeeze
-    img = cv2.resize(img, (0, 0), fx=squeeze[0], fy=max(squeeze[1], 0.01))
+    img = cv2.resize(img, (0, 0), fx=max(squeeze[0], 0.05), fy=max(squeeze[1], 0.05))
 
     # Apply rotation
     img = rotate_image(img, angle)
@@ -159,6 +159,8 @@ def _main_(args: argparse.Namespace) -> None:
     if args.debug:
         cv2.namedWindow('Source with 3D points', cv2.WINDOW_NORMAL)
         cv2.namedWindow('Source with 2D points', cv2.WINDOW_NORMAL)
+    scale_factor = avatar_config['scale']
+    shape = (np.array(avatar_config['shape']) * scale_factor).astype(np.int32)
 
     running = True
     # Main loop
@@ -176,16 +178,22 @@ def _main_(args: argparse.Namespace) -> None:
         if points is None:
             continue
 
+        # Remove reference offset
+        points *= scale_factor
+        offset_ref = np.mean(points[avatar_config['reference']['points']], axis=0)
+        points -= offset_ref - shape / 2
+
         # Draw the avatar
-        img_avatar = 255 * np.ones_like(frame)
+        img_avatar = 255 * np.ones(list(shape) + [4], dtype=np.uint8)
         for name, piece in avatar_config['pieces'].items():
 
             # Get current piece of the face
             img_path = os.path.join(path, name + '.png')
             avatar_piece = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+            avatar_piece = cv2.resize(avatar_piece, (0, 0), fx=scale_factor, fy=scale_factor)
 
             # Get reference points
-            ref_points = [np.array(piece['calibration'][i])
+            ref_points = [np.array(piece['calibration'][i]) * scale_factor
                           for i in range(len(piece['calibration']))]
 
             for ref_points_, transfo in zip(ref_points, piece['transformations']):
@@ -228,6 +236,15 @@ def _main_(args: argparse.Namespace) -> None:
                         ])
                         ref_points[point_i] = (
                             transfo_mat @ points_).transpose()
+
+                elif transfo['method'] == 'reference':
+                    # Get translation parameters
+                    translation = np.mean(cur_points, axis=0) - \
+                        np.mean(ref_points_, axis=0)
+                    
+                    # Apply translation
+                    img_avatar = overlay_image_alpha(
+                        img_avatar, avatar_piece, translation[0], translation[1])
 
                 elif transfo['method'] == 'homography':
                     # Get homography matrix

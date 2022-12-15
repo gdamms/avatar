@@ -88,6 +88,11 @@ def calibrate_avatar(path: str) -> bool:
             cam_scale *= 0.9
         elif key == 13:  # enter
 
+            # Compute reference points
+            avatar_config['reference']['calibration'] = [
+                list(row) for row in np.round(points[avatar_config['reference']['points']], 2)
+            ]
+
             # Compute calibrated points for each piece
             for name, piece in avatar_config['pieces'].items():
                 img_ = cv2.imread(os.path.join(
@@ -106,7 +111,7 @@ def calibrate_avatar(path: str) -> bool:
 
                     # Save calibration positions
                     piece['calibration'].append([list(row)
-                                                 for row in np.round(points_, 1)])
+                                                 for row in np.round(points_, 2)])
 
             # Write avatar config file
             with open(os.path.join(path, 'config.json'), 'w') as f:
