@@ -5,8 +5,8 @@ import argparse
 from rich_argparse import RichHelpFormatter
 import numpy as np
 
-from utils import *
-from calibration import calibrate_avatar
+from src.utils import *
+from src.calibration import calibrate_avatar
 
 
 def compute_transformation(
@@ -137,7 +137,7 @@ def apply_homography(
 def _main_(args: argparse.Namespace) -> None:
     """Main function."""
 
-    path = os.path.join(os.path.dirname(__file__), 'data', args.avatar)
+    path = os.path.join(os.path.dirname(__file__), 'src/data', args.avatar)
 
     # Calibration
     if args.calibrate:

@@ -3,7 +3,7 @@ import cv2
 import json
 import numpy as np
 
-from utils import *
+from src.utils import *
 
 
 def calibrate_avatar(path: str) -> bool:
