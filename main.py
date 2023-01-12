@@ -3,6 +3,7 @@ import cv2
 import json
 import argparse
 from rich_argparse import RichHelpFormatter
+from imageio import mimsave
 import numpy as np
 
 from src.utils import *
@@ -163,6 +164,8 @@ def _main_(args: argparse.Namespace) -> None:
     shape = (np.array(avatar_config['shape']) * scale_factor).astype(np.int32)
 
     running = True
+    recording = False
+
     # Main loop
     while running:
         # Capture and process frame
@@ -295,6 +298,12 @@ def _main_(args: argparse.Namespace) -> None:
                             prev_shape[0] / 2
                         ])
 
+        # Record
+        if recording:
+            frames.append(cv2.cvtColor(img_avatar, cv2.COLOR_BGR2RGB))
+            cv2.putText(img_avatar, 'Recording...', (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
         # Display the result
         cv2.imshow('Source', frame)
         cv2.imshow('Avatar', img_avatar)
@@ -320,6 +329,15 @@ def _main_(args: argparse.Namespace) -> None:
         key = cv2.waitKey(1)
         if key == ord('q') or key == 27:  # q or ESC
             running = False
+        if key == 32:  # space
+            recording = not recording
+            if recording:
+                print('Recording...')
+                frames = []
+            else:
+                print('Saving...')
+                mimsave('output.gif', frames, fps=30)
+                print('Done!')
 
     # Release resources
     cap.release()
