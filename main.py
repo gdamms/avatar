@@ -161,7 +161,7 @@ def _main_(args: argparse.Namespace) -> None:
         cv2.namedWindow('Source with 3D points', cv2.WINDOW_NORMAL)
         cv2.namedWindow('Source with 2D points', cv2.WINDOW_NORMAL)
     scale_factor = avatar_config['scale']
-    shape = (np.array(avatar_config['shape']) * scale_factor).astype(np.int32)
+    shape = (np.array(avatar_config['shape']) * scale_factor * 2).astype(np.int32)
 
     running = True
     recording = False
@@ -181,9 +181,14 @@ def _main_(args: argparse.Namespace) -> None:
         if points is None:
             continue
 
+        # Rescale to reference size
+        size_ref = np.linalg.norm(np.array(avatar_config['reference']['size']['calibration'][0]) - np.array(avatar_config['reference']['size']['calibration'][2]))
+        cur_size = np.linalg.norm(points[avatar_config['reference']['size']['points'][0]] - points[avatar_config['reference']['size']['points'][2]])
+        points *= size_ref / cur_size
+
         # Remove reference offset
         points *= scale_factor
-        offset_ref = np.mean(points[avatar_config['reference']['points']], axis=0)
+        offset_ref = np.mean(points[avatar_config['reference']['offset']['points']], axis=0)
         points -= offset_ref - shape / 2
 
         # Draw the avatar
