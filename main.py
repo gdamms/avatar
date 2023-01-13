@@ -72,7 +72,8 @@ def apply_transformation(
     """
 
     # Apply squeeze
-    img = cv2.resize(img, (0, 0), fx=max(squeeze[0], 0.05), fy=max(squeeze[1], 0.05))
+    img = cv2.resize(img, (0, 0), fx=max(
+        squeeze[0], 0.05), fy=max(squeeze[1], 0.05))
 
     # Apply rotation
     img = rotate_image(img, angle)
@@ -161,17 +162,26 @@ def _main_(args: argparse.Namespace) -> None:
         cv2.namedWindow('Source with 3D points', cv2.WINDOW_NORMAL)
         cv2.namedWindow('Source with 2D points', cv2.WINDOW_NORMAL)
     scale_factor = avatar_config['scale']
-    shape = (np.array(avatar_config['shape']) * scale_factor * 2).astype(np.int32)
+    shape = (np.array(avatar_config['shape'])
+             * scale_factor).astype(np.int32)
 
+    # Initialize variables
     running = True
     recording = False
+    frame_count = 0
+    angle_homo = 0
 
     # Main loop
     while running:
+
+        # Iterate homography angle
+        prev_angle_homo = angle_homo
+
         # Capture and process frame
         success, frame = cap.read()
         if not success:
-            continue
+            print("Error: Failed to capture frame.")
+            break
 
         frame = cv2.flip(frame, 1)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
@@ -182,13 +192,20 @@ def _main_(args: argparse.Namespace) -> None:
             continue
 
         # Rescale to reference size
-        size_ref = np.linalg.norm(np.array(avatar_config['reference']['size']['calibration'][0]) - np.array(avatar_config['reference']['size']['calibration'][2]))
-        cur_size = np.linalg.norm(points[avatar_config['reference']['size']['points'][0]] - points[avatar_config['reference']['size']['points'][2]])
+        size_ref = np.linalg.norm(
+            np.array(avatar_config['reference']['size']['calibration'][0]) -
+            np.array(avatar_config['reference']['size']['calibration'][2])
+        )
+        cur_size = np.linalg.norm(
+            points[avatar_config['reference']['size']['points'][0]] -
+            points[avatar_config['reference']['size']['points'][2]]
+        )
         points *= size_ref / cur_size
 
         # Remove reference offset
         points *= scale_factor
-        offset_ref = np.mean(points[avatar_config['reference']['offset']['points']], axis=0)
+        offset_ref = np.mean(
+            points[avatar_config['reference']['offset']['points']], axis=0)
         points -= offset_ref - shape / 2
 
         # Draw the avatar
@@ -198,7 +215,13 @@ def _main_(args: argparse.Namespace) -> None:
             # Get current piece of the face
             img_path = os.path.join(path, name + '.png')
             avatar_piece = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-            avatar_piece = cv2.resize(avatar_piece, (0, 0), fx=scale_factor, fy=scale_factor)
+            avatar_piece = np.pad(avatar_piece, (
+                (avatar_piece.shape[0], avatar_piece.shape[0]),
+                (avatar_piece.shape[1], avatar_piece.shape[1]),
+                (0, 0)
+            ), 'constant')
+            avatar_piece = cv2.resize(
+                avatar_piece, (0, 0), fx=scale_factor, fy=scale_factor)
 
             # Get reference points
             ref_points = [np.array(piece['calibration'][i]) * scale_factor
@@ -249,7 +272,7 @@ def _main_(args: argparse.Namespace) -> None:
                     # Get translation parameters
                     translation = np.mean(cur_points, axis=0) - \
                         np.mean(ref_points_, axis=0)
-                    
+
                     # Apply translation
                     img_avatar = overlay_image_alpha(
                         img_avatar, avatar_piece, translation[0], translation[1])
@@ -259,6 +282,74 @@ def _main_(args: argparse.Namespace) -> None:
                     homography = compute_homography(
                         ref_points_,
                         cur_points)
+
+                    # Get homography angle
+                    u, _, vh = np.linalg.svd(homography[0:2, 0:2])
+                    R = u @ vh
+                    angle_homo = np.arctan2(R[1, 0], R[0, 0])
+
+                    # Jelly effect
+                    angle_homo = 0.5 * prev_angle_homo + 0.5 * angle_homo
+
+                    if piece["animation"] == "top":
+                        # Compute shift
+                        start_motion = avatar_piece.shape[1] / 3
+                        shift = [int(
+                            start_motion * np.tanh(
+                                (prev_angle_homo - angle_homo) /
+                                3000 * (x - 3 * start_motion)**2)
+                        ) for x in range(avatar_piece.shape[0])]
+
+                        # Apply shift
+                        for i in range(avatar_piece.shape[0]):
+                            shift_ = shift[i]
+                            max_shift = avatar_piece.shape[1]
+                            if shift_ >= 0:
+                                avatar_piece[i, shift_:, :] = avatar_piece[i, :max_shift - shift_, :]
+                                avatar_piece[i, :shift_, :] = 0
+                            if shift_ < 0:
+                                avatar_piece[i, :max_shift + shift_, :] = avatar_piece[i, -shift_:, :]
+                                avatar_piece[i, max_shift + shift_:, :] = 0
+
+                    elif piece["animation"] == "right":
+                        # Compute shift
+                        ampl = (prev_angle_homo - angle_homo) / 3000 + \
+                            np.sin(0.3 * frame_count) / 80000
+                        start_motion = avatar_piece.shape[0] / 3
+                        shift = [int(
+                            start_motion*np.tanh(ampl * (x-start_motion)**2)
+                        ) for x in range(avatar_piece.shape[1])]
+
+                        # Apply shift
+                        for i in range(avatar_piece.shape[1]):
+                            shift_ = shift[i]
+                            max_shift = avatar_piece.shape[0]
+                            if shift_ >= 0:
+                                avatar_piece[shift_:, i, :] = avatar_piece[:max_shift-shift_, i, :]
+                                avatar_piece[:shift_, i, :] = 0
+                            if shift_ < 0:
+                                avatar_piece[:max_shift +  shift_, i, :] = avatar_piece[-shift_:, i, :]
+                                avatar_piece[max_shift + shift_:, i, :] = 0
+
+                    elif piece["animation"] == "left":
+                        # Compute shift
+                        ampl = (angle_homo - prev_angle_homo) / 3000 + \
+                            np.sin(0.3 * frame_count) / 80000
+                        start_motion = avatar_piece.shape[0] / 3
+                        shift = [int(
+                            start_motion * np.tanh(ampl * (x - 2 * start_motion)**2)
+                            ) for x in range(avatar_piece.shape[1])]
+
+                        # Apply shift
+                        for i in range(avatar_piece.shape[1]):
+                            shift_ = shift[i]
+                            max_shift = avatar_piece.shape[0]
+                            if shift_ >= 0:
+                                avatar_piece[shift_:, i, :] = avatar_piece[:max_shift-shift_, i, :]
+                                avatar_piece[:shift_, i, :] = 0
+                            if shift_ < 0:
+                                avatar_piece[:max_shift + shift_, i, :] = avatar_piece[-shift_:, i, :]
+                                avatar_piece[max_shift + shift_:, i, :] = 0
 
                     # Apply homography
                     img_avatar = apply_homography(
@@ -343,6 +434,9 @@ def _main_(args: argparse.Namespace) -> None:
                 print('Saving...')
                 mimsave('output.gif', frames, fps=30)
                 print('Done!')
+
+        # Update frame counter
+        frame_count += 1
 
     # Release resources
     cap.release()

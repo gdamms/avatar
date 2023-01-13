@@ -70,6 +70,7 @@
     },
     "pieces": {
         "body": {
+            "animation": "",
             "transformations": [
                 {
                     "method": "reference",
@@ -117,6 +118,7 @@
             ]
         },
         "earL": {
+            "animation": "top",
             "transformations": [
                 {
                     "method": "homography",
@@ -314,6 +316,7 @@
             ]
         },
         "earR": {
+            "animation": "top",
             "transformations": [
                 {
                     "method": "homography",
@@ -511,6 +514,7 @@
             ]
         },
         "head": {
+            "animation": "",
             "transformations": [
                 {
                     "method": "homography",
@@ -708,6 +712,7 @@
             ]
         },
         "crown": {
+            "animation": "",
             "transformations": [
                 {
                     "method": "homography",
@@ -1043,6 +1048,7 @@
             ]
         },
         "moustacheL": {
+            "animation": "left",
             "transformations": [
                 {
                     "method": "homography",
@@ -1240,6 +1246,7 @@
             ]
         },
         "moustacheR": {
+            "animation": "right",
             "transformations": [
                 {
                     "method": "homography",
@@ -1437,6 +1444,7 @@
             ]
         },
         "mouth": {
+            "animation": "",
             "transformations": [
                 {
                     "method": "transform",

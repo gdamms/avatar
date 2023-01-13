@@ -109,6 +109,7 @@ def calibrate_avatar(path: str) -> bool:
                         cam_pose[1] - frame.shape[0] / 2
                     ])
                     points_ -= np.array(piece['position'])
+                    points_ += np.array([img_.shape[1], img_.shape[0]])
 
                     # Save calibration positions
                     piece['calibration'].append([list(row)
