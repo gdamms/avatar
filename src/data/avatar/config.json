@@ -910,6 +910,7 @@
             ]
         },
         "eyeL": {
+            "animation": "",
             "transformations": [
                 {
                     "method": "squeeze",
@@ -979,6 +980,7 @@
             ]
         },
         "eyeR": {
+            "animation": "",
             "transformations": [
                 {
                     "method": "squeeze",

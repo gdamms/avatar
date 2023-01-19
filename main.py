@@ -170,12 +170,14 @@ def _main_(args: argparse.Namespace) -> None:
     recording = False
     frame_count = 0
     angle_homo = 0
+    next_angle_homo = 0
 
     # Main loop
     while running:
 
         # Iterate homography angle
-        prev_angle_homo = angle_homo
+        prev_angle_homo = next_angle_homo
+        next_angle_homo = (angle_homo + prev_angle_homo) / 2
 
         # Capture and process frame
         success, frame = cap.read()
@@ -222,6 +224,67 @@ def _main_(args: argparse.Namespace) -> None:
             ), 'constant')
             avatar_piece = cv2.resize(
                 avatar_piece, (0, 0), fx=scale_factor, fy=scale_factor)
+
+            # Animations
+            if piece["animation"] == "top":
+                # Compute shift
+                start_motion = avatar_piece.shape[1] / 3
+                shift = [int(
+                    start_motion * np.tanh(
+                        (prev_angle_homo - next_angle_homo) /
+                        1e4 * (x - 3 * start_motion)**2)
+                ) for x in range(avatar_piece.shape[0])]
+
+                # Apply shift
+                for i in range(avatar_piece.shape[0]):
+                    shift_ = shift[i]
+                    max_shift = avatar_piece.shape[1]
+                    if shift_ >= 0:
+                        avatar_piece[i, shift_:, :] = avatar_piece[i, :max_shift - shift_, :]
+                        avatar_piece[i, :shift_, :] = 0
+                    if shift_ < 0:
+                        avatar_piece[i, :max_shift + shift_, :] = avatar_piece[i, -shift_:, :]
+                        avatar_piece[i, max_shift + shift_:, :] = 0
+
+            elif piece["animation"] == "right":
+                # Compute shift
+                ampl = (prev_angle_homo - next_angle_homo) / 1e4 + \
+                    np.sin(0.3 * frame_count) / 1e5
+                start_motion = avatar_piece.shape[0] / 3
+                shift = [int(
+                    start_motion*np.tanh(ampl * (x-start_motion)**2)
+                ) for x in range(avatar_piece.shape[1])]
+
+                # Apply shift
+                for i in range(avatar_piece.shape[1]):
+                    shift_ = shift[i]
+                    max_shift = avatar_piece.shape[0]
+                    if shift_ >= 0:
+                        avatar_piece[shift_:, i, :] = avatar_piece[:max_shift-shift_, i, :]
+                        avatar_piece[:shift_, i, :] = 0
+                    if shift_ < 0:
+                        avatar_piece[:max_shift +  shift_, i, :] = avatar_piece[-shift_:, i, :]
+                        avatar_piece[max_shift + shift_:, i, :] = 0
+
+            elif piece["animation"] == "left":
+                # Compute shift
+                ampl = (next_angle_homo - prev_angle_homo) / 1e4 + \
+                    np.sin(0.3 * frame_count) / 1e5
+                start_motion = avatar_piece.shape[0] / 3
+                shift = [int(
+                    start_motion * np.tanh(ampl * (x - 2 * start_motion)**2)
+                    ) for x in range(avatar_piece.shape[1])]
+
+                # Apply shift
+                for i in range(avatar_piece.shape[1]):
+                    shift_ = shift[i]
+                    max_shift = avatar_piece.shape[0]
+                    if shift_ >= 0:
+                        avatar_piece[shift_:, i, :] = avatar_piece[:max_shift-shift_, i, :]
+                        avatar_piece[:shift_, i, :] = 0
+                    if shift_ < 0:
+                        avatar_piece[:max_shift + shift_, i, :] = avatar_piece[-shift_:, i, :]
+                        avatar_piece[max_shift + shift_:, i, :] = 0
 
             # Get reference points
             ref_points = [np.array(piece['calibration'][i]) * scale_factor
@@ -287,69 +350,6 @@ def _main_(args: argparse.Namespace) -> None:
                     u, _, vh = np.linalg.svd(homography[0:2, 0:2])
                     R = u @ vh
                     angle_homo = np.arctan2(R[1, 0], R[0, 0])
-
-                    # Jelly effect
-                    angle_homo = 0.5 * prev_angle_homo + 0.5 * angle_homo
-
-                    if piece["animation"] == "top":
-                        # Compute shift
-                        start_motion = avatar_piece.shape[1] / 3
-                        shift = [int(
-                            start_motion * np.tanh(
-                                (prev_angle_homo - angle_homo) /
-                                3000 * (x - 3 * start_motion)**2)
-                        ) for x in range(avatar_piece.shape[0])]
-
-                        # Apply shift
-                        for i in range(avatar_piece.shape[0]):
-                            shift_ = shift[i]
-                            max_shift = avatar_piece.shape[1]
-                            if shift_ >= 0:
-                                avatar_piece[i, shift_:, :] = avatar_piece[i, :max_shift - shift_, :]
-                                avatar_piece[i, :shift_, :] = 0
-                            if shift_ < 0:
-                                avatar_piece[i, :max_shift + shift_, :] = avatar_piece[i, -shift_:, :]
-                                avatar_piece[i, max_shift + shift_:, :] = 0
-
-                    elif piece["animation"] == "right":
-                        # Compute shift
-                        ampl = (prev_angle_homo - angle_homo) / 3000 + \
-                            np.sin(0.3 * frame_count) / 80000
-                        start_motion = avatar_piece.shape[0] / 3
-                        shift = [int(
-                            start_motion*np.tanh(ampl * (x-start_motion)**2)
-                        ) for x in range(avatar_piece.shape[1])]
-
-                        # Apply shift
-                        for i in range(avatar_piece.shape[1]):
-                            shift_ = shift[i]
-                            max_shift = avatar_piece.shape[0]
-                            if shift_ >= 0:
-                                avatar_piece[shift_:, i, :] = avatar_piece[:max_shift-shift_, i, :]
-                                avatar_piece[:shift_, i, :] = 0
-                            if shift_ < 0:
-                                avatar_piece[:max_shift +  shift_, i, :] = avatar_piece[-shift_:, i, :]
-                                avatar_piece[max_shift + shift_:, i, :] = 0
-
-                    elif piece["animation"] == "left":
-                        # Compute shift
-                        ampl = (angle_homo - prev_angle_homo) / 3000 + \
-                            np.sin(0.3 * frame_count) / 80000
-                        start_motion = avatar_piece.shape[0] / 3
-                        shift = [int(
-                            start_motion * np.tanh(ampl * (x - 2 * start_motion)**2)
-                            ) for x in range(avatar_piece.shape[1])]
-
-                        # Apply shift
-                        for i in range(avatar_piece.shape[1]):
-                            shift_ = shift[i]
-                            max_shift = avatar_piece.shape[0]
-                            if shift_ >= 0:
-                                avatar_piece[shift_:, i, :] = avatar_piece[:max_shift-shift_, i, :]
-                                avatar_piece[:shift_, i, :] = 0
-                            if shift_ < 0:
-                                avatar_piece[:max_shift + shift_, i, :] = avatar_piece[-shift_:, i, :]
-                                avatar_piece[max_shift + shift_:, i, :] = 0
 
                     # Apply homography
                     img_avatar = apply_homography(
